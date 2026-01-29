@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { meetings, users, tasks } from "@/lib/mock-data";
+import { PdfViewerMock } from "@/components/features/meetings";
 
 interface MeetingDetailPageProps {
   params: { id: string };
@@ -94,6 +95,7 @@ export default function MeetingDetailPage({ params }: MeetingDetailPageProps) {
           <TabsTrigger value="participants">
             Participants ({participantUsers.length})
           </TabsTrigger>
+          <TabsTrigger value="minutes">Meeting Minutes</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -224,6 +226,11 @@ export default function MeetingDetailPage({ params }: MeetingDetailPageProps) {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        {/* Meeting Minutes Tab */}
+        <TabsContent value="minutes">
+          <PdfViewerMock meetingTitle={meeting.title} />
         </TabsContent>
       </Tabs>
     </div>
