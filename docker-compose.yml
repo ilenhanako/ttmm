@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: ttmm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ttmm_user
+      POSTGRES_PASSWORD: ttmm_password
+      POSTGRES_DB: ttmm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-pgvector.sql:/docker-entrypoint-initdb.d/01-init-pgvector.sql
+
+volumes:
+  pgdata:

@@ -1,0 +1,262 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ============================================
+// Department
+// ============================================
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users User[]
+
+  @@map("departments")
+}
+
+// ============================================
+// Role (RBAC)
+// ============================================
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  level       Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+// ============================================
+// Permission (RBAC)
+// ============================================
+model Permission {
+  id          String   @id @default(cuid())
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+// ============================================
+// RolePermission (join table)
+// ============================================
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  constraints  Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================
+// UserRole (join table)
+// ============================================
+model UserRole {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+// ============================================
+// User
+// ============================================
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  avatar       String?
+  departmentId String?     @map("department_id")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  userRoles           UserRole[]
+  createdMeetings     Meeting[]            @relation("CreatedBy")
+  assignedTasks       ActionItem[]         @relation("AssignedTo")
+  chatMessages        ChatMessage[]
+  meetingParticipants MeetingParticipant[]
+
+  @@map("users")
+}
+
+// ============================================
+// Meeting
+// ============================================
+model Meeting {
+  id        String        @id @default(cuid())
+  title     String
+  pdfUrl    String?       @map("pdf_url")
+  date      DateTime?
+  time      String?
+  duration  String?
+  status    MeetingStatus @default(UPCOMING)
+  summary   String?
+  tags      String[]      @default([])
+  createdBy String        @map("created_by")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  creator      User                 @relation("CreatedBy", fields: [createdBy], references: [id])
+  chunks       MeetingChunk[]
+  actionItems  ActionItem[]
+  citations    Citation[]
+  participants MeetingParticipant[]
+
+  @@map("meetings")
+}
+
+enum MeetingStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================
+// MeetingParticipant (join table)
+// ============================================
+model MeetingParticipant {
+  id        String   @id @default(cuid())
+  meetingId String   @map("meeting_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@map("meeting_participants")
+}
+
+// ============================================
+// MeetingChunk (for vector search)
+// ============================================
+model MeetingChunk {
+  id          String @id @default(cuid())
+  meetingId   String @map("meeting_id")
+  content     String
+  chunkIndex  Int    @map("chunk_index")
+  pageNumbers Int[]  @map("page_numbers") @default([])
+  startChar   Int?   @map("start_char")
+  endChar     Int?   @map("end_char")
+
+  // pgvector embedding - 1536 dimensions for OpenAI text-embedding-ada-002
+  embedding Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@map("meeting_chunks")
+}
+
+// ============================================
+// ActionItem (Task)
+// ============================================
+model ActionItem {
+  id          String       @id @default(cuid())
+  meetingId   String       @map("meeting_id")
+  title       String
+  description String?
+  assignedTo  String?      @map("assigned_to")
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  isApproved  Boolean      @default(false) @map("is_approved")
+  dueDate     DateTime?    @map("due_date")
+  tags        String[]     @default([])
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  meeting  Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  assignee User?   @relation("AssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  @@index([meetingId])
+  @@index([assignedTo])
+  @@index([status])
+  @@map("action_items")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ============================================
+// ChatMessage
+// ============================================
+model ChatMessage {
+  id        String      @id @default(cuid())
+  userId    String      @map("user_id")
+  content   String
+  role      MessageRole
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  citations Citation[]
+
+  @@index([userId])
+  @@map("chat_messages")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+// ============================================
+// Citation
+// ============================================
+model Citation {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  meetingId String   @map("meeting_id")
+  excerpt   String
+  timestamp String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  meeting Meeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([meetingId])
+  @@map("citations")
+}
